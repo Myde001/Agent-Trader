@@ -9,15 +9,13 @@ from util import css, js, Color
 from accounts import Account
 from database import read_log
 
-# Reuse model labels for the UI cards
 from trading_floor import names, lastnames, short_model_names, create_traders
 
-# For tracing (optional)
 from tracers import LogTracer
 from agents import add_trace_processor
 
-# Market open behavior
 from market import is_market_open
+
 
 # -------------------------------------------------------------------
 # Color mapper for log lines
@@ -54,7 +52,9 @@ class Trader:
         return self.account.get_strategy()
 
     def get_portfolio_value_df(self) -> pd.DataFrame:
-        df = pd.DataFrame(self.account.portfolio_value_time_series, columns=["datetime", "value"])
+        df = pd.DataFrame(
+            self.account.portfolio_value_time_series, columns=["datetime", "value"]
+        )
         df["datetime"] = pd.to_datetime(df["datetime"])
         return df
 
@@ -63,7 +63,7 @@ class Trader:
         fig = px.line(df, x="datetime", y="value")
         margin = dict(l=40, r=20, t=20, b=40)
         fig.update_layout(
-            height=250,  # smaller height
+            height=250,
             margin=margin,
             xaxis_title=None,
             yaxis_title=None,
@@ -85,7 +85,9 @@ class Trader:
     def get_transactions_df(self) -> pd.DataFrame:
         transactions = self.account.list_transactions()
         if not transactions:
-            return pd.DataFrame(columns=["Timestamp", "Symbol", "Quantity", "Price", "Rationale"])
+            return pd.DataFrame(
+                columns=["Timestamp", "Symbol", "Quantity", "Price", "Rationale"]
+            )
         return pd.DataFrame(transactions)
 
     def get_portfolio_value(self) -> str:
@@ -108,6 +110,7 @@ class Trader:
             color = mapper.get(type, Color.WHITE).value
             response += f"<span style='color:{color}'>{timestamp} : [{type}] {message}</span><br/>"
         response = f"<div style='height:200px; overflow-y:auto;'>{response}</div>"
+        # Force update if content changed
         if response != previous:
             return response
         return gr.update()
@@ -127,11 +130,14 @@ class TraderView:
         with gr.Group(elem_classes=["card"]):
             with gr.Column():
                 gr.HTML(self.trader.get_title())
-                self.portfolio_value = gr.HTML(self.trader.get_portfolio_value)
-                self.chart = gr.Plot(self.trader.get_portfolio_value_chart, container=True, show_label=False)
-                self.log = gr.HTML(self.trader.get_logs)
+
+                # ✅ Initialize components with initial values, not function refs
+                self.portfolio_value = gr.HTML(value=self.trader.get_portfolio_value())
+                self.chart = gr.Plot(value=self.trader.get_portfolio_value_chart())
+                self.log = gr.HTML(value=self.trader.get_logs())
+
                 self.holdings_table = gr.Dataframe(
-                    value=self.trader.get_holdings_df,
+                    value=self.trader.get_holdings_df(),
                     label="Holdings",
                     headers=["Symbol", "Quantity"],
                     row_count=(5, "dynamic"),
@@ -140,7 +146,7 @@ class TraderView:
                     elem_classes=["dataframe-fix-small"],
                 )
                 self.transactions_table = gr.Dataframe(
-                    value=self.trader.get_transactions_df,
+                    value=self.trader.get_transactions_df(),
                     label="Recent Transactions",
                     headers=["Timestamp", "Symbol", "Quantity", "Price", "Rationale"],
                     row_count=(5, "dynamic"),
@@ -163,6 +169,7 @@ class TraderView:
             show_progress="hidden",
             queue=False,
         )
+
         # Fast log refresher
         log_timer = gr.Timer(value=0.5)
         log_timer.tick(
@@ -174,6 +181,7 @@ class TraderView:
         )
 
     def refresh(self):
+        # Always reload data from backend for fresh values
         self.trader.reload()
         return (
             self.trader.get_portfolio_value(),
@@ -186,6 +194,7 @@ class TraderView:
 # -------------------------------------------------------------------
 class TradingController:
     """Runs the agent trading loop in the background."""
+
     def __init__(self):
         self.task: Optional[asyncio.Task] = None
         self.stop_event: Optional[asyncio.Event] = None
@@ -205,7 +214,9 @@ class TradingController:
                     if run_when_closed or is_market_open():
                         await asyncio.gather(*[t.run() for t in traders])
                     try:
-                        await asyncio.wait_for(self.stop_event.wait(), timeout=interval_minutes * 60)
+                        await asyncio.wait_for(
+                            self.stop_event.wait(), timeout=interval_minutes * 60
+                        )
                     except asyncio.TimeoutError:
                         continue
             except asyncio.CancelledError:
@@ -245,7 +256,8 @@ def create_ui():
 
     with gr.Blocks(
         title="Traders",
-        css=css + """
+        css=css
+        + """
         .card { border: 1px solid #ccc; border-radius: 8px; padding: 5px; background-color: #f9f9f9; }
         """,
         js=js,
@@ -277,7 +289,11 @@ def create_ui():
                     stop_state = gr.update(interactive=False)
                     return msg, start_state, stop_state
 
-                start_btn.click(_start, inputs=[interval, run_when_closed], outputs=[status, start_btn, stop_btn])
+                start_btn.click(
+                    _start,
+                    inputs=[interval, run_when_closed],
+                    outputs=[status, start_btn, stop_btn],
+                )
                 stop_btn.click(_stop, inputs=None, outputs=[status, start_btn, stop_btn])
 
                 start_btn.interactive = True
